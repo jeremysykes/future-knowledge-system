@@ -1,0 +1,46 @@
+{
+  "name": "future-knowledge-system",
+  "version": "0.1.0",
+  "description": "A local-first knowledge application where knowledge exists as a continuous semantic field",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "dependencies": {
+    "d3-force": "^3.0.0",
+    "d3-quadtree": "^3.0.1",
+    "d3-scale": "^4.0.2",
+    "d3-interpolate": "^3.0.1",
+    "dexie": "^4.0.4",
+    "zustand": "^4.5.0",
+    "unified": "^11.0.4",
+    "remark-parse": "^11.0.0",
+    "remark-stringify": "^11.0.0",
+    "remark-gfm": "^4.0.0",
+    "flexsearch": "^0.7.43",
+    "gray-matter": "^4.0.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/preload": "^3.0.0",
+    "@electron-toolkit/utils": "^3.0.0",
+    "@types/d3-force": "^3.0.9",
+    "@types/d3-quadtree": "^3.0.6",
+    "@types/d3-scale": "^4.0.8",
+    "@types/d3-interpolate": "^3.0.4",
+    "@types/node": "^20.11.0",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@vitejs/plugin-react": "^4.2.1",
+    "electron": "^28.1.3",
+    "electron-vite": "^2.0.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11",
+    "@webgpu/types": "^0.1.40"
+  }
+}
