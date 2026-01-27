@@ -45,7 +45,8 @@ export function resolveLinks(
       edges.push(
         createEdge(sourceNodeId, targetNodeId, edgeType, {
           strength: link.type === 'wiki' ? 0.8 : 0.5,
-          label: link.text !== link.target ? link.text : undefined
+          label: link.text !== link.target ? link.text : undefined,
+          origin: 'explicit'
         })
       )
     } else {

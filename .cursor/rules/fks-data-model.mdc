@@ -1,0 +1,21 @@
+---
+description: Node, Edge, Rule, Decision, and persistence
+globs: ["**/core/types/**", "**/persistence/**"]
+---
+
+# FKS Data Model
+
+## Node types
+
+- **knowledge:** `content`, `tags`, `importance`
+- **rule:** `content`, `scope` (local|global), `enforcement` (hard|soft)
+- **decision:** `context`, `alternatives`, `rationale`, `status` (open|decided|superseded)
+
+## Edge
+
+- `origin: 'explicit' | 'implicit'`. Explicit from `[[wiki]]` and `[md](url)`; implicit from similarity.
+- `strength` 0–1. Optional `id`; default `${source}->${target}`. Implicit ids: `implicit:${a}:${b}`.
+
+## Persistence
+
+- **IndexedDB**, auto-save, export Markdown/JSON. Works offline; no account.

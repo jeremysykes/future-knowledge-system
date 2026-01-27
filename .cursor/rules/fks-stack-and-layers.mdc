@@ -1,0 +1,11 @@
+---
+description: Stack and architecture
+globs: ["**/*.ts", "**/*.tsx"]
+---
+
+# FKS Stack and Layers
+
+- **Stack:** Electron, TypeScript, WebGPU, React (UI only), D3, IndexedDB. No proprietary SDKs, no cloud lock-in.
+- **Semantic (meaning, no pixels):** similarity, force params, lens, search.
+- **Render (perception, no meaning):** WebGPU, shaders, LOD, viewport, culling.
+- **Interaction (intent; reshapes semantics):** input, focus, selection, drag; controls force and viewport.

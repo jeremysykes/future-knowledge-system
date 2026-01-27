@@ -1,6 +1,7 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { RenderEngine } from '../render/RenderEngine'
 import { Viewport } from '../render/viewport/Viewport'
+import { InteractionEngine } from '../interaction/InteractionEngine'
 import { useFieldStore } from '../core/store/fieldStore'
 import { useViewportStore } from '../core/store/viewportStore'
 import type { LensResult } from '../semantic/lens/LensEngine'
@@ -13,7 +14,7 @@ export function Canvas({ lensResult }: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const engineRef = useRef<RenderEngine | null>(null)
   const viewportRef = useRef<Viewport | null>(null)
-  const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null)
+  const interactionRef = useRef<InteractionEngine | null>(null)
 
   const nodes = useFieldStore((state) => state.nodes)
   const edges = useFieldStore((state) => state.edges)
@@ -34,6 +35,9 @@ export function Canvas({ lensResult }: CanvasProps) {
 
     const viewport = new Viewport({ canvas })
     viewportRef.current = viewport
+
+    const interaction = new InteractionEngine(canvas)
+    interactionRef.current = interaction
 
     // Set initial size and synchronize both engine and viewport
     const resize = (width: number, height: number) => {
@@ -88,6 +92,8 @@ export function Canvas({ lensResult }: CanvasProps) {
     return () => {
       resizeObserver.disconnect()
       window.removeEventListener('resize', windowResizeHandler)
+      interactionRef.current?.destroy()
+      interactionRef.current = null
       engine.destroy()
       viewport.destroy()
     }
@@ -119,95 +125,9 @@ export function Canvas({ lensResult }: CanvasProps) {
     })
   }, [panX, panY, scale, selectedNodeIds, focusedNodeId, lensResult])
 
-  // Track mouse down to distinguish click from drag
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    mouseDownPosRef.current = { x: e.clientX, y: e.clientY }
-  }, [])
-
-  // Handle node click
-  const handleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!viewportRef.current || !canvasRef.current) return
-
-    // Check if this was a drag (mouse moved significantly)
-    if (mouseDownPosRef.current) {
-      const dx = e.clientX - mouseDownPosRef.current.x
-      const dy = e.clientY - mouseDownPosRef.current.y
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
-        // This was a drag, not a click
-        mouseDownPosRef.current = null
-        return
-      }
-    }
-    mouseDownPosRef.current = null
-
-    const rect = canvasRef.current.getBoundingClientRect()
-    const screenX = e.clientX - rect.left
-    const screenY = e.clientY - rect.top
-
-    const worldPos = viewportRef.current.screenToWorld(screenX, screenY)
-
-    // Find node at click position
-    // Node size matches RenderEngine: 8 + importance * 12
-    const state = useFieldStore.getState()
-    for (const node of state.nodes.values()) {
-      const dx = node.position.x - worldPos.x
-      const dy = node.position.y - worldPos.y
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      const importance = node.data.type === 'knowledge' ? node.data.importance : 0.5
-      const nodeSize = 8 + importance * 12
-
-      if (dist < nodeSize) {
-        if (e.shiftKey) {
-          if (state.selectedNodeIds.has(node.id)) {
-            state.deselectNode(node.id)
-          } else {
-            state.selectNode(node.id, true)
-          }
-        } else {
-          state.selectNode(node.id)
-        }
-        return
-      }
-    }
-
-    // Click on empty space clears selection
-    state.clearSelection()
-  }, [])
-
-  // Handle double click to focus
-  const handleDoubleClick = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!viewportRef.current || !canvasRef.current) return
-
-    const rect = canvasRef.current.getBoundingClientRect()
-    const screenX = e.clientX - rect.left
-    const screenY = e.clientY - rect.top
-
-    const worldPos = viewportRef.current.screenToWorld(screenX, screenY)
-
-    const state = useFieldStore.getState()
-    for (const node of state.nodes.values()) {
-      const dx = node.position.x - worldPos.x
-      const dy = node.position.y - worldPos.y
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      // Node size matches RenderEngine: 8 + importance * 12
-      const importance = node.data.type === 'knowledge' ? node.data.importance : 0.5
-      const nodeSize = 8 + importance * 12
-
-      if (dist < nodeSize) {
-        state.focusNode(node.id)
-        return
-      }
-    }
-
-    state.focusNode(null)
-  }, [])
-
   return (
     <canvas
       ref={canvasRef}
-      onMouseDown={handleMouseDown}
-      onClick={handleClick}
-      onDoubleClick={handleDoubleClick}
       style={{
         width: '100%',
         height: '100%',

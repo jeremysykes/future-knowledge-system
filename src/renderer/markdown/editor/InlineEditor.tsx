@@ -2,15 +2,18 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import type { KnowledgeNode } from '../../core/types/node'
 import { useFieldStore } from '../../core/store/fieldStore'
 import { parseMarkdown } from '../parser'
+import { resolveLinks, buildTitleIndex } from '../linkExtractor'
 import { getSearchIndex } from '../../semantic/search/SearchIndex'
 
 interface InlineEditorProps {
   node: KnowledgeNode
-  onClose: () => void
+  onClose?: (saved?: boolean) => void
 }
 
 export function InlineEditor({ node, onClose }: InlineEditorProps) {
   const updateNode = useFieldStore((state) => state.updateNode)
+  const addEdge = useFieldStore((state) => state.addEdge)
+  const deleteEdge = useFieldStore((state) => state.deleteEdge)
   const nodes = useFieldStore((state) => state.nodes)
 
   const [title, setTitle] = useState(node.title)
@@ -114,8 +117,8 @@ export function InlineEditor({ node, onClose }: InlineEditorProps) {
       title
     }
 
+    const parsed = parseMarkdown(content)
     if (node.data.type === 'knowledge') {
-      const parsed = parseMarkdown(content)
       updates.data = {
         ...node.data,
         content,
@@ -134,15 +137,29 @@ export function InlineEditor({ node, onClose }: InlineEditorProps) {
     }
 
     updateNode(node.id, updates)
-    onClose()
-  }, [node, title, content, updateNode, onClose])
+
+    // Explicit edge sync: replace outgoing explicit edges from [[links]] and [md](url)
+    const titleIndex = buildTitleIndex(nodes)
+    const { edges: newEdges } = resolveLinks(node.id, parsed.links, titleIndex)
+    const { edges } = useFieldStore.getState()
+    for (const e of edges.values()) {
+      if (e.source === node.id && (e.origin === 'explicit' || e.origin == null)) {
+        deleteEdge(e.id)
+      }
+    }
+    for (const e of newEdges) {
+      addEdge(e)
+    }
+
+    onClose?.(true)
+  }, [node, title, content, updateNode, addEdge, deleteEdge, nodes, onClose])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       if (showLinkSuggestions) {
         setShowLinkSuggestions(false)
       } else {
-        onClose()
+        onClose?.()
       }
     } else if (e.key === 's' && (e.metaKey || e.ctrlKey)) {
       e.preventDefault()
@@ -198,7 +215,7 @@ export function InlineEditor({ node, onClose }: InlineEditorProps) {
         />
         <div style={{ display: 'flex', gap: 8 }}>
           <button
-            onClick={onClose}
+            onClick={() => onClose?.()}
             style={{
               padding: '4px 12px',
               background: '#2a2a3a',

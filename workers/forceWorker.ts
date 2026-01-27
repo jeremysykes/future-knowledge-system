@@ -60,6 +60,7 @@ type WorkerMessage =
   | { type: 'pinNode'; nodeId: string; x: number; y: number }
   | { type: 'unpinNode'; nodeId: string }
   | { type: 'updateConfig'; config: Partial<ForceConfig> }
+  | { type: 'setGravitySource'; focusedNodeId?: string | null; draggedNodeId?: string | null }
 
 type WorkerResponse =
   | { type: 'tick'; positions: Array<{ id: string; x: number; y: number; vx: number; vy: number }> }
@@ -69,6 +70,7 @@ type WorkerResponse =
 let simulation: Simulation<SimNode, SimLink> | null = null
 const nodes = new Map<string, SimNode>()
 const links = new Map<string, SimLink>()
+let gravitySourceId: string | null = null
 let config: ForceConfig = {
   chargeStrength: -300,
   linkStrength: 0.3,
@@ -96,6 +98,26 @@ function createSimulation(): Simulation<SimNode, SimLink> {
     .stop() // We'll control ticking manually
 
   return sim
+}
+
+function applyGravityForces(): void {
+  if (!simulation) return
+  if (gravitySourceId) {
+    const strengthFn = (d: SimNode) => {
+      if (d.id === gravitySourceId) return 0
+      const linked = Array.from(links.values()).some((l) => {
+        const sid = typeof l.source === 'object' ? (l.source as SimNode).id : l.source
+        const tid = typeof l.target === 'object' ? (l.target as SimNode).id : l.target
+        return (sid === d.id && tid === gravitySourceId) || (tid === d.id && sid === gravitySourceId)
+      })
+      return linked ? 0.1 : 0.02
+    }
+    simulation.force('focusX', forceX(() => nodes.get(gravitySourceId!)?.x ?? 0).strength(strengthFn))
+    simulation.force('focusY', forceY(() => nodes.get(gravitySourceId!)?.y ?? 0).strength(strengthFn))
+  } else {
+    simulation.force('focusX', null)
+    simulation.force('focusY', null)
+  }
 }
 
 function sendTick(): void {
@@ -239,6 +261,11 @@ function handleMessage(e: MessageEvent<WorkerMessage>): void {
       }
       break
     }
+
+    case 'setGravitySource':
+      gravitySourceId = message.draggedNodeId ?? message.focusedNodeId ?? null
+      applyGravityForces()
+      break
 
     case 'updateConfig':
       config = { ...config, ...message.config }

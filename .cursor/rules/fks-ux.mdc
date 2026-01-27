@@ -1,0 +1,11 @@
+---
+description: UX principles for the renderer and UI
+alwaysApply: true
+---
+
+# FKS UX
+
+- **No modal dialogs for core actions.** Minimal chrome; interaction over menus.
+- **Motion communicates state, not spectacle.** Calm, intentional, inevitable. **No viewport animation for focus**—nodes move via the force simulation; viewport stays put.
+- **Desktop:** keyboard shortcuts and precise mouse. **Mobile:** gestures and touch targets.
+- **Scale and quality:** 60fps desktop, 30fps mobile; adapt quality to device. Level-of-detail rendering; labels selective (focused, nearby, hovered), not universal.

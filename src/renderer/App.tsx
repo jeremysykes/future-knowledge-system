@@ -3,12 +3,15 @@ import { Canvas } from './components/Canvas'
 import { SearchBar } from './components/SearchBar'
 import { LensSelector } from './components/LensSelector'
 import { NodeDetailPanel } from './components/NodeDetailPanel'
+import { InlineEditor } from './markdown/editor/InlineEditor'
 import { Timeline } from './components/Timeline'
 import { SeedDatabase } from './components/SeedDatabase'
 import { useFieldStore } from './core/store/fieldStore'
+import { useViewportStore } from './core/store/viewportStore'
 import { createKnowledgeNode, createRuleNode, createDecisionNode } from './core/types/node'
 import { createEdge } from './core/types/edge'
 import { useForceSimulation } from './semantic/force/useForceSimulation'
+import { useImplicitEdgeSync } from './semantic/similarity/useImplicitEdgeSync'
 import { getAutoSave } from './persistence/autoSave'
 import { getSearchIndex } from './semantic/search/SearchIndex'
 import { getHistoryRepository } from './persistence/historyRepository'
@@ -92,8 +95,12 @@ export default function App() {
   const [isTimelineOpen, setIsTimelineOpen] = useState(false)
   const [activeLens, setActiveLens] = useState<LensConfig>({ type: 'all', params: {} })
   const [lensResult, setLensResult] = useState<LensResult | undefined>(undefined)
+  const [editorOpenNodeId, setEditorOpenNodeId] = useState<string | null>(null)
+  const [editorOpenIsNew, setEditorOpenIsNew] = useState(false)
 
   const loadData = useFieldStore((state) => state.loadData)
+  const deleteNode = useFieldStore((state) => state.deleteNode)
+  const addNode = useFieldStore((state) => state.addNode)
   const nodeCount = useFieldStore((state) => state.nodes.size)
   const edgeCount = useFieldStore((state) => state.edges.size)
   const nodes = useFieldStore((state) => state.nodes)
@@ -102,6 +109,8 @@ export default function App() {
   const focusNode = useFieldStore((state) => state.focusNode)
 
   const { start, stop, reheat } = useForceSimulation()
+
+  useImplicitEdgeSync()
 
   // Initialize services
   useEffect(() => {
@@ -140,6 +149,16 @@ export default function App() {
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement)?.isContentEditable) return
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+        e.preventDefault()
+        const vp = useViewportStore.getState()
+        const { x, y } = vp.screenToWorld(vp.width / 2, vp.height / 2)
+        const node = createKnowledgeNode(crypto.randomUUID(), 'Untitled', '', { x, y })
+        addNode(node)
+        eventBus.emit('editor:open', { nodeId: node.id, isNew: true })
+        focusNode(null)
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault()
         setIsSearchOpen(true)
@@ -152,7 +171,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [addNode, focusNode])
 
   // Listen for search trigger
   useEffect(() => {
@@ -161,6 +180,16 @@ export default function App() {
     })
     return unsubscribe
   }, [])
+
+  // Listen for editor:open (create flow: dblclick empty, ⌘N)
+  useEffect(() => {
+    const unsub = eventBus.on('editor:open', (p) => {
+      focusNode(null)
+      setEditorOpenNodeId(p.nodeId)
+      setEditorOpenIsNew(p.isNew)
+    })
+    return unsub
+  }, [focusNode])
 
   const handleLensChange = useCallback((lens: LensConfig) => {
     setActiveLens(lens)
@@ -273,11 +302,11 @@ export default function App() {
           <SeedDatabase />
         </div>
         <div style={{ marginTop: 8, fontSize: 11, color: '#555', pointerEvents: 'none' }}>
-          Drag: Pan • Scroll: Zoom
+          Drag empty: Pan • Scroll: Zoom • Drag node: Move
           <br />
-          Click: Select • Shift+Click: Multi-select
+          Click: Select • Shift+Click: Multi-select • Delete: Remove • Arrows: Nudge
           <br />
-          Double-click: Focus • ⌘K: Search
+          Double-click: Focus or create • ⌘N: New node • ⌘K: Search
         </div>
       </div>
 
@@ -291,7 +320,9 @@ export default function App() {
           fontSize: 14,
           fontFamily: 'system-ui, sans-serif',
           fontWeight: 600,
-          letterSpacing: 1
+          letterSpacing: 1,
+          pointerEvents: 'none',
+          userSelect: 'none'
         }}
       >
         FUTURE KNOWLEDGE SYSTEM
@@ -320,6 +351,41 @@ export default function App() {
         onClose={() => setIsTimelineOpen(false)}
         onRestoreSnapshot={handleRestoreSnapshot}
       />
+
+      {/* Editor modal (create flow: editor:open) */}
+      {editorOpenNodeId && (() => {
+        const node = nodes.get(editorOpenNodeId)
+        if (!node) return null
+        const isNew = editorOpenIsNew
+        return (
+          <>
+            <div
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                zIndex: 999
+              }}
+              onClick={() => {
+                setEditorOpenNodeId(null)
+                setEditorOpenIsNew(false)
+                if (isNew) deleteNode(editorOpenNodeId)
+              }}
+            />
+            <InlineEditor
+              node={node}
+              onClose={(saved) => {
+                setEditorOpenNodeId(null)
+                setEditorOpenIsNew(false)
+                if (isNew && !saved) deleteNode(editorOpenNodeId)
+              }}
+            />
+          </>
+        )
+      })()}
     </div>
   )
 }

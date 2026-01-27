@@ -1,0 +1,11 @@
+---
+description: Input, drag, pan, zoom, focus, selection
+globs: ["**/interaction/**", "**/components/Canvas*.tsx", "**/render/viewport/**"]
+---
+
+# FKS Interaction
+
+- **InteractionEngine:** mouse/touch; node-drag, click (select), dblclick (focus or create on empty). **Do not pan when `draggedNodeId` is set.**
+- **Viewport:** pan (left on empty, middle), zoom (wheel, pinch). In `handleMouseMove` and 1-touch `handleTouchMove`: return if `draggedNodeId`.
+- **Keyboard:** Delete, Arrows (nudge), ⌘N (new node at viewport center), ⌘K (search). **Guard:** if target is `HTMLInputElement`, `HTMLTextAreaElement`, or `isContentEditable`, do not handle.
+- Focus and drag reshape the field via gravity; no viewport animate for focus.

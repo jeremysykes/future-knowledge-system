@@ -10,6 +10,7 @@ interface FieldStore {
   focusedNodeId: string | null
   selectedNodeIds: Set<string>
   isSimulationRunning: boolean
+  draggedNodeId: string | null
 
   // Node actions
   addNode: (node: KnowledgeNode) => void
@@ -33,6 +34,7 @@ interface FieldStore {
 
   // Focus actions
   focusNode: (id: string | null) => void
+  setDraggedNodeId: (id: string | null) => void
 
   // Simulation
   setSimulationRunning: (running: boolean) => void
@@ -54,6 +56,7 @@ export const useFieldStore = create<FieldStore>((set, get) => ({
   focusedNodeId: null,
   selectedNodeIds: new Set(),
   isSimulationRunning: false,
+  draggedNodeId: null,
 
   addNode: (node) => {
     set((state) => {
@@ -104,7 +107,8 @@ export const useFieldStore = create<FieldStore>((set, get) => ({
         nodes: newNodes,
         edges: newEdges,
         selectedNodeIds: newSelected,
-        focusedNodeId: state.focusedNodeId === id ? null : state.focusedNodeId
+        focusedNodeId: state.focusedNodeId === id ? null : state.focusedNodeId,
+        draggedNodeId: state.draggedNodeId === id ? null : state.draggedNodeId
       }
     })
   },
@@ -259,6 +263,8 @@ export const useFieldStore = create<FieldStore>((set, get) => ({
     set({ focusedNodeId: id })
   },
 
+  setDraggedNodeId: (id) => set({ draggedNodeId: id }),
+
   setSimulationRunning: (running) => {
     set({ isSimulationRunning: running })
     eventBus.emit(running ? 'simulation:started' : 'simulation:stopped', {})
@@ -279,7 +285,8 @@ export const useFieldStore = create<FieldStore>((set, get) => ({
       nodes: nodeMap,
       edges: edgeMap,
       selectedNodeIds: new Set(),
-      focusedNodeId: null
+      focusedNodeId: null,
+      draggedNodeId: null
     })
 
     eventBus.emit('data:loaded', { nodeCount: nodes.length, edgeCount: edges.length })
@@ -290,7 +297,8 @@ export const useFieldStore = create<FieldStore>((set, get) => ({
       nodes: new Map(),
       edges: new Map(),
       selectedNodeIds: new Set(),
-      focusedNodeId: null
+      focusedNodeId: null,
+      draggedNodeId: null
     })
   },
 

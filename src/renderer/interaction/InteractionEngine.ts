@@ -1,4 +1,5 @@
 import type { KnowledgeNode } from '../core/types/node'
+import { createKnowledgeNode } from '../core/types/node'
 import { useFieldStore } from '../core/store/fieldStore'
 import { useViewportStore } from '../core/store/viewportStore'
 import { eventBus } from '../core/events/eventBus'
@@ -168,6 +169,7 @@ export class InteractionEngine {
     if (distance > this.config.dragThreshold) {
       this.dragState.isDragging = true
       this.canvas.style.cursor = 'grabbing'
+      useFieldStore.getState().setDraggedNodeId(this.dragState.nodeId)
 
       // Cancel long press
       if (this.longPressTimer) {
@@ -196,7 +198,7 @@ export class InteractionEngine {
     }
 
     if (this.dragState.isDragging && this.dragState.nodeId) {
-      // Unpin after drag unless it was a long press
+      useFieldStore.getState().setDraggedNodeId(null)
       const state = useFieldStore.getState()
       state.unpinNode(this.dragState.nodeId)
     }
@@ -229,6 +231,9 @@ export class InteractionEngine {
         } else {
           state.selectNode(node.id, true)
         }
+      } else if (state.selectedNodeIds.size === 1 && state.selectedNodeIds.has(node.id)) {
+        // Click on already-only-selected node: open focus panel
+        state.focusNode(node.id)
       } else {
         // Single selection
         state.selectNode(node.id)
@@ -245,13 +250,12 @@ export class InteractionEngine {
 
     if (node) {
       state.focusNode(node.id)
-
-      // Animate viewport to center on node
-      const viewport = useViewportStore.getState()
-      const targetPanX = viewport.width / 2 - node.position.x * viewport.scale
-      const targetPanY = viewport.height / 2 - node.position.y * viewport.scale
-      viewport.animateTo(targetPanX, targetPanY, Math.max(viewport.scale, 1.5))
     } else {
+      // Double-click on empty: create new node and open editor
+      const id = crypto.randomUUID()
+      const newNode = createKnowledgeNode(id, 'Untitled', '', { x: worldPos.x, y: worldPos.y })
+      state.addNode(newNode)
+      eventBus.emit('editor:open', { nodeId: id, isNew: true })
       state.focusNode(null)
     }
   }
@@ -309,6 +313,7 @@ export class InteractionEngine {
 
       if (distance > this.config.dragThreshold) {
         this.dragState.isDragging = true
+        useFieldStore.getState().setDraggedNodeId(this.dragState.nodeId)
 
         const worldPos = this.getWorldPosition(touch.clientX, touch.clientY)
         const newX = worldPos.x + this.dragState.offsetX
@@ -382,6 +387,7 @@ export class InteractionEngine {
   }
 
   private handleKeyDown(e: KeyboardEvent): void {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement)?.isContentEditable) return
     const state = useFieldStore.getState()
 
     switch (e.key) {

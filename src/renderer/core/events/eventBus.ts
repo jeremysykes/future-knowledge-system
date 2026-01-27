@@ -34,6 +34,8 @@ export type EventType =
   | 'data:loaded'
   | 'data:saved'
   | 'data:error'
+  // Editor
+  | 'editor:open'
 
 export interface EventPayloads {
   'node:created': { node: KnowledgeNode }
@@ -62,6 +64,7 @@ export interface EventPayloads {
   'data:loaded': { nodeCount: number; edgeCount: number }
   'data:saved': { timestamp: string }
   'data:error': { error: string }
+  'editor:open': { nodeId: string; isNew: boolean }
 }
 
 type EventCallback<T extends EventType> = (payload: EventPayloads[T]) => void

@@ -46,13 +46,15 @@ export function useForceSimulation(config: Partial<ForceConfig> = {}) {
 
   const nodes = useFieldStore((state) => state.nodes)
   const edges = useFieldStore((state) => state.edges)
+  const focusedNodeId = useFieldStore((state) => state.focusedNodeId)
+  const draggedNodeId = useFieldStore((state) => state.draggedNodeId)
   const bulkUpdatePositions = useFieldStore((state) => state.bulkUpdatePositions)
   const setSimulationRunning = useFieldStore((state) => state.setSimulationRunning)
 
   // Initialize worker
   useEffect(() => {
     const worker = new Worker(
-      new URL('../../../workers/forceWorker.ts', import.meta.url),
+      new URL('../../../../workers/forceWorker.ts', import.meta.url),
       { type: 'module' }
     )
 
@@ -62,6 +64,11 @@ export function useForceSimulation(config: Partial<ForceConfig> = {}) {
       switch (message.type) {
         case 'ready':
           isInitializedRef.current = true
+          worker.postMessage({
+            type: 'setGravitySource',
+            focusedNodeId: useFieldStore.getState().focusedNodeId,
+            draggedNodeId: useFieldStore.getState().draggedNodeId
+          })
           break
 
         case 'tick': {
@@ -121,6 +128,12 @@ export function useForceSimulation(config: Partial<ForceConfig> = {}) {
 
     workerRef.current.postMessage({ type: 'updateEdges', edges: edgeData })
   }, [edges])
+
+  // Sync gravity source (dragged > focused) with worker
+  useEffect(() => {
+    if (!workerRef.current) return
+    workerRef.current.postMessage({ type: 'setGravitySource', focusedNodeId, draggedNodeId })
+  }, [focusedNodeId, draggedNodeId])
 
   const start = useCallback(() => {
     if (workerRef.current) {

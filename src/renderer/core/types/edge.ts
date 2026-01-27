@@ -1,5 +1,7 @@
 export type EdgeType = 'link' | 'reference' | 'contradiction' | 'supports' | 'derived'
 
+export type EdgeOrigin = 'explicit' | 'implicit'
+
 export interface Edge {
   id: string
   source: string // node id
@@ -9,22 +11,24 @@ export interface Edge {
   label?: string
   createdAt: string
   bidirectional: boolean
+  origin?: EdgeOrigin // explicit: from [[links]]/markdown; implicit: from similarity
 }
 
 export function createEdge(
   source: string,
   target: string,
   type: EdgeType = 'link',
-  options?: Partial<Pick<Edge, 'strength' | 'label' | 'bidirectional'>>
+  options?: Partial<Pick<Edge, 'strength' | 'label' | 'bidirectional' | 'origin'>> & { id?: string }
 ): Edge {
   return {
-    id: `${source}->${target}`,
+    id: options?.id ?? `${source}->${target}`,
     source,
     target,
     type,
     strength: options?.strength ?? 0.5,
     label: options?.label,
     bidirectional: options?.bidirectional ?? false,
+    origin: options?.origin ?? 'explicit',
     createdAt: new Date().toISOString()
   }
 }

@@ -1,0 +1,20 @@
+---
+description: Core identity, non-goals, and design stance for the Future Knowledge System
+alwaysApply: true
+---
+
+# FKS Principles
+
+- **Local-first, web-native.** Knowledge as continuous semantic field; documents are temporary projections. No primary page view, no canonical list, no folder tree. Meaning from relationships, proximity, time, attention.
+- **Knowledge behaves like matter.** Ideas have weight, exert influence, drift, cluster, decay. Attention as gravity; time as erosion. Interface is a living environment, not a filing system.
+- **Spatial layout as primary interface.** Distance = relevance; motion = change; density = uncertainty; no viewport animation for focus—nodes move, viewport does not.
+
+## Non-Goals
+
+Never become: Notion 3D, VR, game engine, chat, productivity dashboard, or visual-effect showcase. If it doesn't increase sense-making, it's out of scope.
+
+## Design Stance
+
+- **Authored instrument, not a platform.**
+- Prefer **Clarity** over flexibility, **Inevitability** over features, **Meaning** over novelty.
+- AI may assist in building; AI is not a runtime dependency. No proprietary SDKs, no cloud lock-in.

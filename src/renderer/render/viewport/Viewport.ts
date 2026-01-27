@@ -1,4 +1,5 @@
 import { useViewportStore } from '../../core/store/viewportStore'
+import { useFieldStore } from '../../core/store/fieldStore'
 
 interface ViewportOptions {
   canvas: HTMLCanvasElement
@@ -84,6 +85,7 @@ export class Viewport {
   }
 
   private handleMouseMove(e: MouseEvent): void {
+    if (useFieldStore.getState().draggedNodeId) return
     // Start dragging if moved enough (prevents accidental pans on clicks)
     if (!this.isDragging && (e.buttons === 1 || e.buttons === 4)) {
       const moveThreshold = 3
@@ -160,6 +162,7 @@ export class Viewport {
       this.store().zoom(scale, centerX - rect.left, centerY - rect.top)
       this.lastPinchDistance = distance
     } else if (this.isDragging && e.touches.length === 1) {
+      if (useFieldStore.getState().draggedNodeId) return
       const deltaX = (e.touches[0].clientX - this.lastMouseX) * this.panSpeed
       const deltaY = (e.touches[0].clientY - this.lastMouseY) * this.panSpeed
 

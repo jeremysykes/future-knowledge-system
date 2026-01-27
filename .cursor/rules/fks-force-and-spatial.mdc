@@ -1,0 +1,11 @@
+---
+description: Force simulation, gravity, and rendering
+globs: ["**/semantic/force/**", "**/workers/force*.ts", "**/render/**"]
+---
+
+# FKS Force and Spatial
+
+- **Attraction** (edge weight), **repulsion**, **decay**, **focus/drag gravity.**
+- **Gravity source:** `draggedNodeId ?? focusedNodeId ?? null`. Apply `forceX`/`forceY` toward that node’s `(x,y)`; stronger for linked nodes, weaker for others. When null, remove those forces.
+- **D3 or equivalent;** worker for performance. Level-of-detail; motion continuous.
+- **Render:** WebGPU, instanced nodes, LOD, viewport culling. No viewport animate for focus.
