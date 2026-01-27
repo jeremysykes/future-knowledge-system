@@ -84,19 +84,26 @@ export class Viewport {
   }
 
   private handleMouseMove(e: MouseEvent): void {
-    const deltaX = e.clientX - this.lastMouseX
-    const deltaY = e.clientY - this.lastMouseY
-
     // Start dragging if moved enough (prevents accidental pans on clicks)
     if (!this.isDragging && (e.buttons === 1 || e.buttons === 4)) {
       const moveThreshold = 3
+      const deltaX = e.clientX - this.lastMouseX
+      const deltaY = e.clientY - this.lastMouseY
+      
       if (Math.abs(deltaX) > moveThreshold || Math.abs(deltaY) > moveThreshold) {
         this.isDragging = true
         this.canvas.style.cursor = 'grabbing'
+        // Reset reference position when dragging actually starts to prevent jump
+        this.lastMouseX = e.clientX
+        this.lastMouseY = e.clientY
+        return
       }
     }
 
     if (!this.isDragging) return
+
+    const deltaX = e.clientX - this.lastMouseX
+    const deltaY = e.clientY - this.lastMouseY
 
     this.store().pan(deltaX * this.panSpeed, deltaY * this.panSpeed)
 
