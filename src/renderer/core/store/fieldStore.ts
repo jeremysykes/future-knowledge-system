@@ -11,6 +11,7 @@ interface FieldStore {
   selectedNodeIds: Set<string>
   isSimulationRunning: boolean
   draggedNodeId: string | null
+  hoveredNodeId: string | null
 
   // Node actions
   addNode: (node: KnowledgeNode) => void
@@ -35,6 +36,7 @@ interface FieldStore {
   // Focus actions
   focusNode: (id: string | null) => void
   setDraggedNodeId: (id: string | null) => void
+  setHoveredNodeId: (id: string | null) => void
 
   // Simulation
   setSimulationRunning: (running: boolean) => void
@@ -57,6 +59,7 @@ export const useFieldStore = create<FieldStore>((set, get) => ({
   selectedNodeIds: new Set(),
   isSimulationRunning: false,
   draggedNodeId: null,
+  hoveredNodeId: null,
 
   addNode: (node) => {
     set((state) => {
@@ -155,7 +158,8 @@ export const useFieldStore = create<FieldStore>((set, get) => ({
       const updatedNode = {
         ...node,
         fx: null,
-        fy: null
+        fy: null,
+        velocity: { vx: 0, vy: 0 }
       }
       const newNodes = new Map(state.nodes)
       newNodes.set(id, updatedNode)
@@ -265,6 +269,8 @@ export const useFieldStore = create<FieldStore>((set, get) => ({
 
   setDraggedNodeId: (id) => set({ draggedNodeId: id }),
 
+  setHoveredNodeId: (id) => set({ hoveredNodeId: id }),
+
   setSimulationRunning: (running) => {
     set({ isSimulationRunning: running })
     eventBus.emit(running ? 'simulation:started' : 'simulation:stopped', {})
@@ -286,7 +292,8 @@ export const useFieldStore = create<FieldStore>((set, get) => ({
       edges: edgeMap,
       selectedNodeIds: new Set(),
       focusedNodeId: null,
-      draggedNodeId: null
+      draggedNodeId: null,
+      hoveredNodeId: null
     })
 
     eventBus.emit('data:loaded', { nodeCount: nodes.length, edgeCount: edges.length })
@@ -298,7 +305,8 @@ export const useFieldStore = create<FieldStore>((set, get) => ({
       edges: new Map(),
       selectedNodeIds: new Set(),
       focusedNodeId: null,
-      draggedNodeId: null
+      draggedNodeId: null,
+      hoveredNodeId: null
     })
   },
 

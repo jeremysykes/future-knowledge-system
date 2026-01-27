@@ -84,6 +84,35 @@ class KnowledgeDatabase extends Dexie {
 
 export const db = new KnowledgeDatabase()
 
+let _openPromise: Promise<boolean> | null = null
+let _dbAvailable = true
+
+export async function ensureDbOpen(): Promise<boolean> {
+  if (_openPromise == null) {
+    _openPromise = (async () => {
+      const tryOpen = async (): Promise<boolean> => {
+        try {
+          await db.open()
+          return true
+        } catch (e) {
+          console.error('IndexedDB open failed:', e)
+          return false
+        }
+      }
+      if (await tryOpen()) return true
+      await new Promise((r) => setTimeout(r, 400))
+      const ok = await tryOpen()
+      if (!ok) _dbAvailable = false
+      return ok
+    })()
+  }
+  return _openPromise
+}
+
+export function isDbAvailable(): boolean {
+  return _dbAvailable
+}
+
 // Conversion utilities
 export function nodeToStored(node: KnowledgeNode): StoredNode {
   return {

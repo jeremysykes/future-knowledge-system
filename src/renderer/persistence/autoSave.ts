@@ -17,6 +17,7 @@ const DEFAULT_CONFIG: AutoSaveConfig = {
 export class AutoSave {
   private config: AutoSaveConfig
   private saveTimer: ReturnType<typeof setTimeout> | null = null
+  private flushInterval: ReturnType<typeof setInterval> | null = null
   private pendingNodes = new Map<string, KnowledgeNode>()
   private pendingEdges = new Map<string, Edge>()
   private pendingDeletes = {
@@ -27,6 +28,23 @@ export class AutoSave {
   constructor(config: Partial<AutoSaveConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config }
     this.setupListeners()
+    this.startPeriodicFlush()
+  }
+
+  private startPeriodicFlush(): void {
+    if (this.flushInterval) return
+    this.flushInterval = setInterval(() => {
+      if (this.config.enabled && (this.pendingNodes.size > 0 || this.pendingEdges.size > 0 || this.pendingDeletes.nodes.size > 0 || this.pendingDeletes.edges.size > 0)) {
+        this.flush()
+      }
+    }, 2000)
+  }
+
+  private stopPeriodicFlush(): void {
+    if (this.flushInterval) {
+      clearInterval(this.flushInterval)
+      this.flushInterval = null
+    }
   }
 
   private setupListeners(): void {
@@ -99,6 +117,10 @@ export class AutoSave {
       this.saveTimer = null
     }
 
+    if (this.pendingNodes.size > 0 || this.pendingEdges.size > 0 || this.pendingDeletes.nodes.size > 0 || this.pendingDeletes.edges.size > 0) {
+      console.log(`[AutoSave] Flushing ${this.pendingNodes.size} nodes`)
+    }
+
     try {
       await db.transaction('rw', [db.nodes, db.edges, db.history], async () => {
         // Save nodes
@@ -146,6 +168,8 @@ export class AutoSave {
 
       const nodes = storedNodes.map(storedToNode)
       const edges = storedEdges.map(storedToEdge)
+
+      console.log(`[AutoSave] Loaded ${nodes.length} nodes, ${edges.length} edges`)
 
       eventBus.emit('data:loaded', {
         nodeCount: nodes.length,
@@ -274,7 +298,20 @@ export class AutoSave {
   setEnabled(enabled: boolean): void {
     this.config.enabled = enabled
 
-    if (!enabled && this.saveTimer) {
+    if (!enabled) {
+      if (this.saveTimer) {
+        clearTimeout(this.saveTimer)
+        this.saveTimer = null
+      }
+      this.stopPeriodicFlush()
+    } else {
+      this.startPeriodicFlush()
+    }
+  }
+
+  destroy(): void {
+    this.stopPeriodicFlush()
+    if (this.saveTimer) {
       clearTimeout(this.saveTimer)
       this.saveTimer = null
     }

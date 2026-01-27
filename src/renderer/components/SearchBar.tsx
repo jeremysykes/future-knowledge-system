@@ -4,12 +4,17 @@ import { useFieldStore } from '../core/store/fieldStore'
 import { useViewportStore } from '../core/store/viewportStore'
 import { eventBus } from '../core/events/eventBus'
 
+const ZOOM_IN_VIEW_THRESHOLD = 0.8
+const SEARCH_SELECT_CAP = 20
+
 interface SearchBarProps {
   isOpen: boolean
   onClose: () => void
+  stopSimulation?: () => void
+  startSimulation?: () => void
 }
 
-export function SearchBar({ isOpen, onClose }: SearchBarProps) {
+export function SearchBar({ isOpen, onClose, stopSimulation, startSimulation }: SearchBarProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -18,8 +23,10 @@ export function SearchBar({ isOpen, onClose }: SearchBarProps) {
   const nodes = useFieldStore((state) => state.nodes)
   const selectNode = useFieldStore((state) => state.selectNode)
   const focusNode = useFieldStore((state) => state.focusNode)
+  const clearSelection = useFieldStore((state) => state.clearSelection)
 
-  // Focus input when opened
+  // Focus input when opened; conditional zoom-to-fit when <80% of nodes in view.
+  // Pause forces during the zoom animation to avoid jank from nodes moving.
   useEffect(() => {
     if (isOpen && inputRef.current) {
       inputRef.current.focus()
@@ -27,7 +34,39 @@ export function SearchBar({ isOpen, onClose }: SearchBarProps) {
       setResults([])
       setSelectedIndex(0)
     }
-  }, [isOpen])
+
+    if (isOpen && nodes.size > 0) {
+      const vp = useViewportStore.getState()
+      let inViewCount = 0
+      let minX = Infinity
+      let maxX = -Infinity
+      let minY = Infinity
+      let maxY = -Infinity
+
+      for (const n of nodes.values()) {
+        const { x, y } = vp.worldToScreen(n.position.x, n.position.y)
+        if (x >= 0 && x <= vp.width && y >= 0 && y <= vp.height) inViewCount++
+
+        minX = Math.min(minX, n.position.x)
+        maxX = Math.max(maxX, n.position.x)
+        minY = Math.min(minY, n.position.y)
+        maxY = Math.max(maxY, n.position.y)
+      }
+
+      if (inViewCount / nodes.size < ZOOM_IN_VIEW_THRESHOLD) {
+        const padding = 50
+        const bounds = { minX: minX - padding, minY: minY - padding, maxX: maxX + padding, maxY: maxY + padding }
+
+        const run = async () => {
+          stopSimulation?.()
+          await new Promise((r) => setTimeout(r, 50))
+          await vp.animateFitToContent(bounds, 300)
+          startSimulation?.()
+        }
+        run()
+      }
+    }
+  }, [isOpen, nodes, stopSimulation, startSimulation])
 
   // Index nodes when they change
   useEffect(() => {
@@ -50,21 +89,22 @@ export function SearchBar({ isOpen, onClose }: SearchBarProps) {
     eventBus.emit('search:results', { nodeIds: searchResults.map((r) => r.nodeId) })
   }, [query])
 
-  const handleSelect = useCallback((result: SearchResult) => {
-    const node = nodes.get(result.nodeId)
-    if (!node) return
+  const handleSelect = useCallback(
+    (result: SearchResult) => {
+      const node = nodes.get(result.nodeId)
+      if (!node) return
 
-    selectNode(result.nodeId)
-    focusNode(result.nodeId)
-
-    // Animate to node
-    const viewport = useViewportStore.getState()
-    const targetPanX = viewport.width / 2 - node.position.x * viewport.scale
-    const targetPanY = viewport.height / 2 - node.position.y * viewport.scale
-    viewport.animateTo(targetPanX, targetPanY, Math.max(viewport.scale, 1.2))
-
-    onClose()
-  }, [nodes, selectNode, focusNode, onClose])
+      clearSelection()
+      const toSelect = results.slice(0, SEARCH_SELECT_CAP)
+      for (const r of toSelect) {
+        selectNode(r.nodeId, true)
+      }
+      focusNode(result.nodeId)
+      eventBus.emit('search:submit:result', { shown: toSelect.length, total: results.length })
+      onClose()
+    },
+    [nodes, results, clearSelection, selectNode, focusNode, onClose]
+  )
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     switch (e.key) {

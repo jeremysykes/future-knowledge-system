@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback } from 'react'
 import { Canvas } from './components/Canvas'
 import { SearchBar } from './components/SearchBar'
-import { LensSelector } from './components/LensSelector'
+import { LeftPanel } from './components/LeftPanel'
 import { NodeDetailPanel } from './components/NodeDetailPanel'
 import { InlineEditor } from './markdown/editor/InlineEditor'
 import { Timeline } from './components/Timeline'
+import { PerformanceMonitor } from './components/PerformanceMonitor'
 import { SeedDatabase } from './components/SeedDatabase'
 import { useFieldStore } from './core/store/fieldStore'
 import { useViewportStore } from './core/store/viewportStore'
@@ -12,6 +13,7 @@ import { createKnowledgeNode, createRuleNode, createDecisionNode } from './core/
 import { createEdge } from './core/types/edge'
 import { useForceSimulation } from './semantic/force/useForceSimulation'
 import { useImplicitEdgeSync } from './semantic/similarity/useImplicitEdgeSync'
+import { ensureDbOpen } from './persistence/db'
 import { getAutoSave } from './persistence/autoSave'
 import { getSearchIndex } from './semantic/search/SearchIndex'
 import { getHistoryRepository } from './persistence/historyRepository'
@@ -23,10 +25,8 @@ function generateTestNodes(count: number) {
   const edges = []
 
   for (let i = 0; i < count; i++) {
-    const angle = i * 0.5
-    const radius = 50 + i * 3
-    const x = Math.cos(angle) * radius
-    const y = Math.sin(angle) * radius
+    const x = (Math.random() - 0.5) * 120
+    const y = (Math.random() - 0.5) * 120
 
     if (i % 10 === 0) {
       nodes.push(
@@ -97,14 +97,14 @@ export default function App() {
   const [lensResult, setLensResult] = useState<LensResult | undefined>(undefined)
   const [editorOpenNodeId, setEditorOpenNodeId] = useState<string | null>(null)
   const [editorOpenIsNew, setEditorOpenIsNew] = useState(false)
+  const [searchToast, setSearchToast] = useState<{ shown: number; total: number } | null>(null)
+  const [dbUnavailable, setDbUnavailable] = useState(false)
+  const [dbBannerDismissed, setDbBannerDismissed] = useState(false)
 
   const loadData = useFieldStore((state) => state.loadData)
   const deleteNode = useFieldStore((state) => state.deleteNode)
   const addNode = useFieldStore((state) => state.addNode)
-  const nodeCount = useFieldStore((state) => state.nodes.size)
-  const edgeCount = useFieldStore((state) => state.edges.size)
   const nodes = useFieldStore((state) => state.nodes)
-  const isSimulationRunning = useFieldStore((state) => state.isSimulationRunning)
   const focusedNodeId = useFieldStore((state) => state.focusedNodeId)
   const focusNode = useFieldStore((state) => state.focusNode)
 
@@ -116,25 +116,54 @@ export default function App() {
   useEffect(() => {
     const autoSave = getAutoSave()
     const searchIndex = getSearchIndex()
-    const historyRepo = getHistoryRepository()
 
-    // Try to load saved data first
-    autoSave.loadAll().then(({ nodes: savedNodes, edges: savedEdges }) => {
-      if (savedNodes.length > 0) {
-        loadData(savedNodes, savedEdges)
-        searchIndex.indexAll(new Map(savedNodes.map((n) => [n.id, n])))
-      } else {
-        // Generate test data if no saved data
+    // Electron: register for prepare-to-close so we can flush before window destroy
+    const w = window as unknown as { api?: { onPrepareToClose?: (cb: () => Promise<void>) => void } }
+    if (w.api?.onPrepareToClose) {
+      w.api.onPrepareToClose(() => getAutoSave().flush())
+    }
+
+    // beforeunload: start flush (fire-and-forget) for browser or when handshake not used
+    const onBeforeUnload = (): void => {
+      getAutoSave().flush()
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+
+    const run = async () => {
+      const dbOk = await ensureDbOpen()
+      if (!dbOk) {
+        autoSave.setEnabled(false)
+        setDbUnavailable(true)
+        console.log('[App] IndexedDB unavailable; using in-memory data only')
         const { nodes: testNodes, edges: testEdges } = generateTestNodes(100)
         loadData(testNodes, testEdges)
         searchIndex.indexAll(new Map(testNodes.map((n) => [n.id, n])))
+        setTimeout(() => start(true), 100)
+        return
       }
 
-      // Start simulation
-      setTimeout(() => start(), 100)
-    })
+      // Try to load saved data first
+      console.log('[App] location.origin:', typeof location !== 'undefined' ? location.origin : 'N/A')
+      autoSave.loadAll().then(({ nodes: savedNodes, edges: savedEdges }) => {
+        if (savedNodes.length > 0) {
+          console.log('[App] Using saved data:', savedNodes.length, 'nodes,', savedEdges.length, 'edges')
+          loadData(savedNodes, savedEdges)
+          searchIndex.indexAll(new Map(savedNodes.map((n) => [n.id, n])))
+        } else {
+          console.log('[App] No saved data, generating test data')
+          const { nodes: testNodes, edges: testEdges } = generateTestNodes(100)
+          loadData(testNodes, testEdges)
+          searchIndex.indexAll(new Map(testNodes.map((n) => [n.id, n])))
+        }
+
+        // Start simulation
+        setTimeout(() => start(true), 100)
+      })
+    }
+    run()
 
     return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload)
       stop()
       autoSave.flush()
     }
@@ -181,6 +210,25 @@ export default function App() {
     return unsubscribe
   }, [])
 
+  // Search submit toast: "X of Y nodes selected", 3s, reset on new submit
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    const unsub = eventBus.on('search:submit:result', (p) => {
+      if (timeoutId) clearTimeout(timeoutId)
+      setSearchToast(p)
+      timeoutId = setTimeout(() => {
+        setSearchToast(null)
+        timeoutId = null
+      }, 3000)
+    })
+
+    return () => {
+      unsub()
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [])
+
   // Listen for editor:open (create flow: dblclick empty, ⌘N)
   useEffect(() => {
     const unsub = eventBus.on('editor:open', (p) => {
@@ -220,97 +268,63 @@ export default function App() {
         height: '100vh',
         overflow: 'hidden',
         backgroundColor: '#0a0a0f',
-        position: 'relative'
+        display: 'flex',
+        flexDirection: 'row'
       }}
     >
-      <Canvas lensResult={lensResult} />
+      <LeftPanel
+        onSearchOpen={() => setIsSearchOpen(true)}
+        onHistoryOpen={() => setIsTimelineOpen(true)}
+        onLensChange={handleLensChange}
+        start={start}
+        stop={stop}
+        reheat={reheat}
+        dbAvailable={!dbUnavailable}
+      />
 
-      {/* Info overlay */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 16,
-          left: 16,
-          color: '#888',
-          fontSize: 12,
-          fontFamily: 'system-ui, sans-serif',
-          userSelect: 'none'
-        }}
-      >
-        <div>Nodes: {nodeCount}</div>
-        <div>Edges: {edgeCount}</div>
-        <div>Simulation: {isSimulationRunning ? 'Running' : 'Stopped'}</div>
-        <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+      {/* DB unavailable banner */}
+      {dbUnavailable && !dbBannerDismissed && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 600,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '8px 16px',
+            background: '#3a2020',
+            borderBottom: '1px solid #5a3030',
+            color: '#e8c0c0',
+            fontSize: 13,
+            fontFamily: 'system-ui, sans-serif'
+          }}
+        >
+          <span>Local database could not be opened. Data is not being saved.</span>
           <button
-            onClick={() => (isSimulationRunning ? stop() : start())}
+            type="button"
+            onClick={() => setDbBannerDismissed(true)}
             style={{
-              padding: '4px 8px',
-              background: '#2a2a3a',
-              border: '1px solid #4a4a5a',
+              padding: '4px 10px',
+              background: '#4a3030',
+              border: '1px solid #6a4040',
               borderRadius: 4,
-              color: '#ccc',
+              color: '#e8c0c0',
               cursor: 'pointer',
-              fontSize: 11
+              fontSize: 12
             }}
           >
-            {isSimulationRunning ? 'Stop' : 'Start'}
-          </button>
-          <button
-            onClick={() => reheat(0.5)}
-            style={{
-              padding: '4px 8px',
-              background: '#2a2a3a',
-              border: '1px solid #4a4a5a',
-              borderRadius: 4,
-              color: '#ccc',
-              cursor: 'pointer',
-              fontSize: 11
-            }}
-          >
-            Reheat
-          </button>
-          <button
-            onClick={() => setIsSearchOpen(true)}
-            style={{
-              padding: '4px 8px',
-              background: '#2a2a3a',
-              border: '1px solid #4a4a5a',
-              borderRadius: 4,
-              color: '#ccc',
-              cursor: 'pointer',
-              fontSize: 11
-            }}
-          >
-            Search (⌘K)
-          </button>
-          <button
-            onClick={() => setIsTimelineOpen(true)}
-            style={{
-              padding: '4px 8px',
-              background: '#2a2a3a',
-              border: '1px solid #4a4a5a',
-              borderRadius: 4,
-              color: '#ccc',
-              cursor: 'pointer',
-              fontSize: 11
-            }}
-          >
-            History
+            Dismiss
           </button>
         </div>
-        <div style={{ marginTop: 8 }}>
-          <SeedDatabase />
-        </div>
-        <div style={{ marginTop: 8, fontSize: 11, color: '#555', pointerEvents: 'none' }}>
-          Drag empty: Pan • Scroll: Zoom • Drag node: Move
-          <br />
-          Click: Select • Shift+Click: Multi-select • Delete: Remove • Arrows: Nudge
-          <br />
-          Double-click: Focus or create • ⌘N: New node • ⌘K: Search
-        </div>
-      </div>
+      )}
 
-      {/* Title */}
+      <div style={{ flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+        <Canvas lensResult={lensResult} />
+
+        {/* Title */}
       <div
         style={{
           position: 'absolute',
@@ -328,9 +342,6 @@ export default function App() {
         FUTURE KNOWLEDGE SYSTEM
       </div>
 
-      {/* Lens Selector */}
-      <LensSelector onLensChange={handleLensChange} />
-
       {/* Node Detail Panel */}
       {focusedNodeId && (
         <NodeDetailPanel
@@ -339,11 +350,39 @@ export default function App() {
         />
       )}
 
+      {/* Performance monitor */}
+      <PerformanceMonitor />
+
       {/* Search Bar */}
       <SearchBar
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
+        stopSimulation={stop}
+        startSimulation={start}
       />
+
+      {/* Search submit toast */}
+      {searchToast && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '10px 16px',
+            backgroundColor: '#1a1a24',
+            border: '1px solid #2a2a3a',
+            borderRadius: 8,
+            color: '#e0e0e0',
+            fontSize: 13,
+            fontFamily: 'system-ui, sans-serif',
+            zIndex: 500,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.4)'
+          }}
+        >
+          {searchToast.shown} of {searchToast.total} nodes selected
+        </div>
+      )}
 
       {/* Timeline */}
       <Timeline
@@ -386,6 +425,7 @@ export default function App() {
           </>
         )
       })()}
+      </div>
     </div>
   )
 }

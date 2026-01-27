@@ -49,6 +49,9 @@ export class InteractionEngine {
   private lastTapPosition = { x: 0, y: 0 }
   private longPressTimer: ReturnType<typeof setTimeout> | null = null
 
+  private nudgePinnedIds = new Set<string>()
+  private nudgeUnpinTimer: ReturnType<typeof setTimeout> | null = null
+
   private touchState = {
     touches: new Map<number, { x: number; y: number }>(),
     lastPinchDistance: 0,
@@ -160,38 +163,55 @@ export class InteractionEngine {
   }
 
   private handleMouseMove(e: MouseEvent): void {
-    if (!this.dragState.nodeId) return
+    if (this.dragState.nodeId) {
+      const dx = e.clientX - this.dragState.startX
+      const dy = e.clientY - this.dragState.startY
+      const distance = Math.sqrt(dx * dx + dy * dy)
 
-    const dx = e.clientX - this.dragState.startX
-    const dy = e.clientY - this.dragState.startY
-    const distance = Math.sqrt(dx * dx + dy * dy)
+      if (distance > this.config.dragThreshold) {
+        this.dragState.isDragging = true
+        this.canvas.style.cursor = 'grabbing'
+        useFieldStore.getState().setDraggedNodeId(this.dragState.nodeId)
+        useFieldStore.getState().setHoveredNodeId(null)
 
-    if (distance > this.config.dragThreshold) {
-      this.dragState.isDragging = true
-      this.canvas.style.cursor = 'grabbing'
-      useFieldStore.getState().setDraggedNodeId(this.dragState.nodeId)
+        // Cancel long press
+        if (this.longPressTimer) {
+          clearTimeout(this.longPressTimer)
+          this.longPressTimer = null
+        }
 
-      // Cancel long press
-      if (this.longPressTimer) {
-        clearTimeout(this.longPressTimer)
-        this.longPressTimer = null
+        // Move the node
+        const worldPos = this.getWorldPosition(e.clientX, e.clientY)
+        const newX = worldPos.x + this.dragState.offsetX
+        const newY = worldPos.y + this.dragState.offsetY
+
+        const state = useFieldStore.getState()
+        state.setNodePosition(this.dragState.nodeId, newX, newY)
+        state.pinNode(this.dragState.nodeId, newX, newY)
       }
 
-      // Move the node
-      const worldPos = this.getWorldPosition(e.clientX, e.clientY)
-      const newX = worldPos.x + this.dragState.offsetX
-      const newY = worldPos.y + this.dragState.offsetY
-
-      const state = useFieldStore.getState()
-      state.setNodePosition(this.dragState.nodeId, newX, newY)
-      state.pinNode(this.dragState.nodeId, newX, newY)
+      this.dragState.currentX = e.clientX
+      this.dragState.currentY = e.clientY
+      return
     }
 
-    this.dragState.currentX = e.clientX
-    this.dragState.currentY = e.clientY
+    // Hover and cursor when not dragging
+    const worldPos = this.getWorldPosition(e.clientX, e.clientY)
+    const node = this.findNodeAtPosition(worldPos.x, worldPos.y)
+    const next = node?.id ?? null
+    if (next !== useFieldStore.getState().hoveredNodeId) {
+      useFieldStore.getState().setHoveredNodeId(next)
+    }
+    if (node) {
+      this.canvas.style.cursor = 'pointer'
+    } else if (this.canvas.style.cursor === 'pointer') {
+      this.canvas.style.cursor = 'default'
+    }
   }
 
   private handleMouseUp(e: MouseEvent): void {
+    useFieldStore.getState().setHoveredNodeId(null)
+
     if (this.longPressTimer) {
       clearTimeout(this.longPressTimer)
       this.longPressTimer = null
@@ -424,17 +444,31 @@ export class InteractionEngine {
       case 'ArrowDown':
       case 'ArrowLeft':
       case 'ArrowRight':
-        // Nudge selected nodes
+        // Nudge selected nodes: pin at new position, cancel any pending unpin
         if (state.selectedNodeIds.size > 0) {
           e.preventDefault()
           const delta = e.shiftKey ? 10 : 1
           const dx = e.key === 'ArrowLeft' ? -delta : e.key === 'ArrowRight' ? delta : 0
           const dy = e.key === 'ArrowUp' ? -delta : e.key === 'ArrowDown' ? delta : 0
 
+          if (this.nudgeUnpinTimer) {
+            clearTimeout(this.nudgeUnpinTimer)
+            this.nudgeUnpinTimer = null
+          }
+
+          // Unpin nodes that were nudge-pinned but are no longer in the new selection
+          const newIds = state.selectedNodeIds
+          for (const id of this.nudgePinnedIds) {
+            if (!newIds.has(id)) {
+              state.unpinNode(id)
+            }
+          }
+
+          this.nudgePinnedIds = new Set(state.selectedNodeIds)
           for (const nodeId of state.selectedNodeIds) {
             const node = state.nodes.get(nodeId)
             if (node) {
-              state.setNodePosition(nodeId, node.position.x + dx, node.position.y + dy)
+              state.pinNode(nodeId, node.position.x + dx, node.position.y + dy)
             }
           }
         }
@@ -464,8 +498,21 @@ export class InteractionEngine {
     }
   }
 
-  private handleKeyUp(_e: KeyboardEvent): void {
-    // Handle key release if needed
+  private handleKeyUp(e: KeyboardEvent): void {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement)?.isContentEditable) return
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown' && e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+    if (this.nudgePinnedIds.size === 0) return
+
+    if (this.nudgeUnpinTimer) {
+      clearTimeout(this.nudgeUnpinTimer)
+    }
+    this.nudgeUnpinTimer = setTimeout(() => {
+      for (const id of this.nudgePinnedIds) {
+        useFieldStore.getState().unpinNode(id)
+      }
+      this.nudgePinnedIds.clear()
+      this.nudgeUnpinTimer = null
+    }, 300)
   }
 
   destroy(): void {
@@ -483,6 +530,10 @@ export class InteractionEngine {
 
     if (this.longPressTimer) {
       clearTimeout(this.longPressTimer)
+    }
+    if (this.nudgeUnpinTimer) {
+      clearTimeout(this.nudgeUnpinTimer)
+      this.nudgeUnpinTimer = null
     }
   }
 }

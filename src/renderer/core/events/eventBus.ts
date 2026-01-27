@@ -30,6 +30,7 @@ export type EventType =
   | 'search:query'
   | 'search:results'
   | 'search:clear'
+  | 'search:submit:result'
   // Persistence events
   | 'data:loaded'
   | 'data:saved'
@@ -61,6 +62,7 @@ export interface EventPayloads {
   'search:query': { query: string }
   'search:results': { nodeIds: string[] }
   'search:clear': Record<string, never>
+  'search:submit:result': { shown: number; total: number }
   'data:loaded': { nodeCount: number; edgeCount: number }
   'data:saved': { timestamp: string }
   'data:error': { error: string }

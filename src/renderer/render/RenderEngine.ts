@@ -13,6 +13,7 @@ interface RenderState {
   scale: number
   focusedNodeId: string | null
   selectedNodeIds: Set<string>
+  hoveredNodeId: string | null
   time: number
   lens?: LensRenderState
 }
@@ -45,6 +46,7 @@ export class RenderEngine {
     scale: 1,
     focusedNodeId: null,
     selectedNodeIds: new Set(),
+    hoveredNodeId: null,
     time: 0
   }
 
@@ -108,24 +110,31 @@ export class RenderEngine {
 
   private drawEdges(): void {
     const ctx = this.ctx
+    const { hoveredNodeId } = this.renderState
 
     for (const edge of this.edges.values()) {
       const sourceNode = this.nodes.get(edge.source)
       const targetNode = this.nodes.get(edge.target)
       if (!sourceNode || !targetNode) continue
 
+      const isEdgeDimmed =
+        hoveredNodeId != null && edge.source !== hoveredNodeId && edge.target !== hoveredNodeId
+
       ctx.beginPath()
       ctx.moveTo(sourceNode.position.x, sourceNode.position.y)
       ctx.lineTo(targetNode.position.x, targetNode.position.y)
       ctx.strokeStyle = EDGE_COLORS[edge.type] || EDGE_COLORS.link
       ctx.lineWidth = 1 + edge.strength
+      if (isEdgeDimmed) ctx.globalAlpha = 0.25
       ctx.stroke()
+      if (isEdgeDimmed) ctx.globalAlpha = 1
     }
+    ctx.globalAlpha = 1
   }
 
   private drawNodes(): void {
     const ctx = this.ctx
-    const { focusedNodeId, selectedNodeIds, lens } = this.renderState
+    const { focusedNodeId, selectedNodeIds, hoveredNodeId, lens } = this.renderState
 
     for (const node of this.nodes.values()) {
       const { x, y } = node.position
@@ -137,15 +146,14 @@ export class RenderEngine {
 
       const isSelected = selectedNodeIds.has(node.id)
       const isFocused = focusedNodeId === node.id
-      const isDimmed = lens?.dimmed.has(node.id) ?? false
+      const isHovered = hoveredNodeId === node.id
+      const isDimmed =
+        (lens?.dimmed.has(node.id) ?? false) || (hoveredNodeId != null && !isHovered)
       const isEmphasized = lens?.emphasized.has(node.id) ?? false
 
-      // Calculate alpha based on lens state
+      // Calculate alpha based on lens and hover state
       let alpha = 1
-      if (lens) {
-        if (isDimmed) alpha = 0.25
-        else if (isEmphasized) alpha = 1
-      }
+      if (isDimmed) alpha = 0.25
 
       // Draw glow for focused or emphasized nodes
       if (isFocused || isEmphasized) {

@@ -135,9 +135,9 @@ export function useForceSimulation(config: Partial<ForceConfig> = {}) {
     workerRef.current.postMessage({ type: 'setGravitySource', focusedNodeId, draggedNodeId })
   }, [focusedNodeId, draggedNodeId])
 
-  const start = useCallback(() => {
+  const start = useCallback((soft?: boolean) => {
     if (workerRef.current) {
-      workerRef.current.postMessage({ type: 'start' })
+      workerRef.current.postMessage({ type: 'start', soft })
       setSimulationRunning(true)
     }
   }, [setSimulationRunning])

@@ -20,6 +20,7 @@ export function Canvas({ lensResult }: CanvasProps) {
   const edges = useFieldStore((state) => state.edges)
   const selectedNodeIds = useFieldStore((state) => state.selectedNodeIds)
   const focusedNodeId = useFieldStore((state) => state.focusedNodeId)
+  const hoveredNodeId = useFieldStore((state) => state.hoveredNodeId)
 
   const panX = useViewportStore((state) => state.panX)
   const panY = useViewportStore((state) => state.panY)
@@ -117,13 +118,14 @@ export function Canvas({ lensResult }: CanvasProps) {
       scale,
       selectedNodeIds,
       focusedNodeId,
+      hoveredNodeId,
       lens: lensResult ? {
         emphasized: lensResult.emphasized,
         dimmed: lensResult.dimmed,
         sizeMultipliers: lensResult.sizeMultipliers
       } : undefined
     })
-  }, [panX, panY, scale, selectedNodeIds, focusedNodeId, lensResult])
+  }, [panX, panY, scale, selectedNodeIds, focusedNodeId, hoveredNodeId, lensResult])
 
   return (
     <canvas

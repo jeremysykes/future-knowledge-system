@@ -5,9 +5,11 @@ import { getSearchIndex } from '../semantic/search/SearchIndex'
 
 interface LensSelectorProps {
   onLensChange: (lens: LensConfig) => void
+  /** When true, render inline in a panel instead of absolute overlay */
+  embedded?: boolean
 }
 
-export function LensSelector({ onLensChange }: LensSelectorProps) {
+export function LensSelector({ onLensChange, embedded }: LensSelectorProps) {
   const [activeLens, setActiveLens] = useState<LensType>('all')
   const [isExpanded, setIsExpanded] = useState(false)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
@@ -39,9 +41,7 @@ export function LensSelector({ onLensChange }: LensSelectorProps) {
   return (
     <div
       style={{
-        position: 'absolute',
-        bottom: 16,
-        left: 16,
+        ...(embedded ? { position: 'relative' as const } : { position: 'absolute', bottom: 16, left: 16 }),
         backgroundColor: '#1a1a24',
         borderRadius: 8,
         padding: 8,

@@ -4,10 +4,14 @@ import type { Edge } from '../core/types/edge'
 import { createKnowledgeNode, createRuleNode, createDecisionNode } from '../core/types/node'
 import { createEdge } from '../core/types/edge'
 
+const SEED_NODE_CAP = 10_000
+
 export interface SeedOptions {
   clearExisting?: boolean
   nodeCount?: number
   edgeCount?: number
+  /** If false, skip writing to IndexedDB and only return in-memory nodes/edges. Default true. */
+  persist?: boolean
 }
 
 const KNOWLEDGE_TITLES = [
@@ -65,11 +69,11 @@ const CONTENT_SAMPLES = [
 ]
 
 export async function seedDatabase(options: SeedOptions = {}): Promise<{ nodes: KnowledgeNode[], edges: Edge[] }> {
-  const {
-    clearExisting = false,
-    nodeCount = 75,
-    edgeCount = 30
-  } = options
+  const { clearExisting = false, nodeCount: requested = 75, edgeCount: requestedEdges, persist = true } = options
+  const nodeCount = Math.min(SEED_NODE_CAP, Math.max(1, requested))
+  const edgeCount = requestedEdges != null
+    ? Math.min(Math.max(0, requestedEdges), nodeCount * 2)
+    : Math.min(Math.floor(nodeCount * 0.4), Math.max(0, nodeCount - 1))
 
   const nodes: KnowledgeNode[] = []
   const edges: Edge[] = []
@@ -86,13 +90,10 @@ export async function seedDatabase(options: SeedOptions = {}): Promise<{ nodes: 
     }
   }
 
-  // Create nodes
+  // Create nodes in a tight cluster around origin (no outer periphery on init)
   for (let i = 0; i < nodeCount; i++) {
-    // Use spiral pattern similar to old generateTestNodes for better spacing
-    const angle = i * 0.5
-    const radius = 50 + i * 3
-    const x = Math.cos(angle) * radius
-    const y = Math.sin(angle) * radius
+    const x = (Math.random() - 0.5) * 120
+    const y = (Math.random() - 0.5) * 120
 
     const type = nodeTypes[i]
     let node: KnowledgeNode
@@ -206,7 +207,11 @@ export async function seedDatabase(options: SeedOptions = {}): Promise<{ nodes: 
     }
   }
 
-  // Save to database
+  // Save to database (skip when persist is false, e.g. DB unavailable)
+  if (persist === false) {
+    return { nodes, edges }
+  }
+
   try {
     await db.transaction('rw', [db.nodes, db.edges], async () => {
       if (clearExisting) {

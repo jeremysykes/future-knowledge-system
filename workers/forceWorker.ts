@@ -54,7 +54,7 @@ type WorkerMessage =
   | { type: 'init'; config: ForceConfig }
   | { type: 'updateNodes'; nodes: NodeData[] }
   | { type: 'updateEdges'; edges: EdgeData[] }
-  | { type: 'start' }
+  | { type: 'start'; soft?: boolean }
   | { type: 'stop' }
   | { type: 'reheat'; alpha: number }
   | { type: 'pinNode'; nodeId: string; x: number; y: number }
@@ -80,6 +80,22 @@ let config: ForceConfig = {
   velocityDecay: 0.3
 }
 let tickInterval: ReturnType<typeof setInterval> | null = null
+let hasEverStarted = false
+
+const RADIAL_BOUND = 1000
+
+function applyRadialBound(): void {
+  for (const node of nodes.values()) {
+    const x = node.x ?? 0
+    const y = node.y ?? 0
+    const r = Math.sqrt(x * x + y * y)
+    if (r > RADIAL_BOUND) {
+      const s = RADIAL_BOUND / r
+      node.x = x * s
+      node.y = y * s
+    }
+  }
+}
 
 function createSimulation(): Simulation<SimNode, SimLink> {
   const sim = forceSimulation<SimNode, SimLink>()
@@ -173,6 +189,10 @@ function handleMessage(e: MessageEvent<WorkerMessage>): void {
           }
           nodes.set(nodeData.id, simNode)
         } else {
+          simNode.x = nodeData.x
+          simNode.y = nodeData.y
+          simNode.vx = nodeData.vx
+          simNode.vy = nodeData.vy
           simNode.fx = nodeData.fx
           simNode.fy = nodeData.fy
         }
@@ -209,13 +229,22 @@ function handleMessage(e: MessageEvent<WorkerMessage>): void {
       break
     }
 
-    case 'start':
-      if (simulation && !tickInterval) {
-        simulation.alpha(1).restart()
-        // Run at 30Hz
-        tickInterval = setInterval(() => {
+    case 'start': {
+      if (!simulation || tickInterval) break
+      if (!hasEverStarted) {
+        for (const node of nodes.values()) {
+          node.vx = 0
+          node.vy = 0
+        }
+        hasEverStarted = true
+      }
+      const alpha = message.soft === true ? 0.1 : 1
+      simulation.alpha(alpha).restart()
+      // Run at 30Hz
+      tickInterval = setInterval(() => {
           if (simulation) {
             simulation.tick()
+            applyRadialBound()
             sendTick()
 
             if (simulation.alpha() < 0.001) {
@@ -223,8 +252,8 @@ function handleMessage(e: MessageEvent<WorkerMessage>): void {
             }
           }
         }, 33.33)
-      }
       break
+    }
 
     case 'stop':
       if (tickInterval) {

@@ -20,6 +20,7 @@ interface ViewportActions {
   setDimensions: (width: number, height: number) => void
   reset: () => void
   fitToContent: (bounds: { minX: number; minY: number; maxX: number; maxY: number }) => void
+  animateFitToContent: (bounds: { minX: number; minY: number; maxX: number; maxY: number }, duration?: number) => Promise<void>
   animateTo: (x: number, y: number, scale: number, duration?: number) => Promise<void>
   setAnimating: (animating: boolean) => void
   screenToWorld: (screenX: number, screenY: number) => { x: number; y: number }
@@ -118,6 +119,30 @@ export const useViewportStore = create<ViewportStore>((set, get) => ({
     const newPanY = -contentCenterY * newScale
 
     set({ scale: newScale, panX: newPanX, panY: newPanY })
+  },
+
+  animateFitToContent: async (bounds, duration = 300) => {
+    const state = get()
+    const contentWidth = bounds.maxX - bounds.minX
+    const contentHeight = bounds.maxY - bounds.minY
+
+    if (contentWidth <= 0 || contentHeight <= 0) return Promise.resolve()
+
+    const padding = 50
+    const availableWidth = state.width - padding * 2
+    const availableHeight = state.height - padding * 2
+
+    const scaleX = availableWidth / contentWidth
+    const scaleY = availableHeight / contentHeight
+    const newScale = Math.min(scaleX, scaleY, state.maxScale)
+
+    const contentCenterX = (bounds.minX + bounds.maxX) / 2
+    const contentCenterY = (bounds.minY + bounds.maxY) / 2
+
+    const newPanX = -contentCenterX * newScale
+    const newPanY = -contentCenterY * newScale
+
+    return get().animateTo(newPanX, newPanY, newScale, duration)
   },
 
   animateTo: async (targetX, targetY, targetScale, duration = 300) => {

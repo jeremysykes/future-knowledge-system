@@ -12,6 +12,16 @@ export interface FileInfo {
 }
 
 const api = {
+  onPrepareToClose: (callback: () => Promise<void>): void => {
+    ipcRenderer.once('app:prepare-to-close', async () => {
+      try {
+        await callback()
+      } finally {
+        ipcRenderer.send('app:ready-to-close')
+      }
+    })
+  },
+
   fs: {
     selectDirectory: (): Promise<string | null> =>
       ipcRenderer.invoke('fs:selectDirectory'),
