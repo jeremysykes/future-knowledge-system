@@ -101,9 +101,3 @@ workers/
 
 - **Cursor rules** (`.cursor/rules/`): `fks-principles`, `fks-ux`, `fks-interaction`, `fks-data-model`, `fks-force-and-spatial`, `fks-stack-and-layers`.
 - **Prompts** in `docs/` for design context (Chat GPT, Claude, Cursor).
-
----
-
-## License
-
-MIT
